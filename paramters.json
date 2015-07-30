@@ -13,9 +13,6 @@
       },
       "dnsNameForPublicIP": {
         "value": "devopscleazure"
-      },
-      "vmSize": {
-        "value": "Standard_D2"
       }
     }
 }
