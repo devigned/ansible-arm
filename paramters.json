@@ -1,21 +1,17 @@
 {
-  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
-  "contentVersion": "1.0.0.0",
-  "parameters": {
-    "newStorageAccountName": {
-      "value": "devopsclestorage"
-    },
-    "adminUsername": {
-      "value": "devopscle"
-    },
-    "adminPassword": {
-      "value": "Password1!"
-    },
-    "dnsNameForPublicIP": {
-      "value": "devopscleazure"
-    },
-    "vmSize": {
-      "value": "Standard_D2"
-    }
+  "newStorageAccountName": {
+    "value": "devopsclestorage"
+  },
+  "adminUsername": {
+    "value": "devopscle"
+  },
+  "adminPassword": {
+    "value": "Password1!"
+  },
+  "dnsNameForPublicIP": {
+    "value": "devopscleazure"
+  },
+  "vmSize": {
+    "value": "Standard_D2"
   }
 }
