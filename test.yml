@@ -1,0 +1,30 @@
+
+---
+- name: Destory Azure Deploy
+  hosts: 127.0.0.1
+  connection: local
+  tasks:
+    - name: Delete deploy
+      local_action:
+        module: azure_deploy
+        state: absent
+        subscription_id: cbbdaed0-fea9-4693-bf0c-d446ac93c030
+        resource_group_name: dev-ops-cle
+        deployment_name: test01
+
+- name: Create Azure Deploy
+  hosts: 127.0.0.1
+  connection: local
+  tasks:
+    - name: Create deploy
+      local_action:
+        module: azure_deploy
+        state: present
+        subscription_id: cbbdaed0-fea9-4693-bf0c-d446ac93c030
+        resource_group_name: dev-ops-cle
+        deployment_name: test01
+        parameters_link: 'https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/101-vm-simple-linux-vm-data-disk/azuredeploy-parameters.json'
+        template_link: 'https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/101-vm-simple-linux-vm-data-disk/azuredeploy.json'
+        content_version: '1.0.0.0'
+
+

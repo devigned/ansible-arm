@@ -1,12 +1,11 @@
 #!/usr/bin/python
 DOCUMENTATION = '''
 ---
-module: azure_template
+module: azure_deploy
 short_description: Provision and Read Azure resources via the Azure Resource Manager REST API
 version_added: "2.0"
 description:
      - Launches or destroys an Azure deployment template
-version_added: "1.1"
 options:
   subscription_id:
     description:
@@ -16,7 +15,7 @@ options:
     description:
       - The resource group name to use or create to host the deployed template
     required: true
-  name:
+  deployment_name:
     description:
       - The name of the deployment
     required: true
@@ -54,11 +53,22 @@ options:
         one of them is required if "state" parameter is "present"
     required: false
     default: null
+  content_version:
+    description:
+      - Version of the content inside of the template
+    require: false
+    default: 1.0.0.0
+  location:
+    description:
+      - Where the resource group should live
+    require: false
+    default: West US
+  tags:
+    description:
+      - Tags to associate to the resource group
+    require: false
+    default: {}
 '''
-
-import time
-import json
-
 try:
     import requests
 
@@ -67,7 +77,7 @@ except ImportError:
     HAS_REQUESTS = False
 
 AZURE_URL = "https://management.azure.com"
-TEMPLATE_URL_FORMAT = "/{}/resourcegroups/{}/providers/microsoft.resources/deployments/{}?api-version={}"
+DEPLOY_URL_FORMAT = "/subscriptions/{}/resourcegroups/{}/providers/microsoft.resources/deployments/{}?api-version={}"
 API_VERSION = "2014-01-01"
 
 FINAL_STATES = ['Created', 'Deleted', 'Canceled', 'Failed', 'Succeeded']
@@ -90,6 +100,7 @@ def get_token(domain_or_tenant, client_id, client_secret):
         'grant_type': grant_type,
         'client_id': client_id,
         'client_secret': client_secret,
+        'resource': 'https://management.core.windows.net/'
     }
     response = requests.post(token_url, data=payload).json()
     return response['access_token']
@@ -175,13 +186,18 @@ def get_azure_connection_info(module):
 
 
 def deploy_url(subscription_id, resource_group_name, deployment_name, api_version=API_VERSION):
-    return AZURE_URL + TEMPLATE_URL_FORMAT.format(subscription_id, resource_group_name, deployment_name, api_version)
+    return AZURE_URL + DEPLOY_URL_FORMAT.format(subscription_id, resource_group_name, deployment_name, api_version)
+
+
+def resource_group_url(subscription_id, resource_group_name, api_version=API_VERSION):
+    return AZURE_URL + "/subscriptions/{}/resourcegroups/{}?api-version={}".format(subscription_id, resource_group_name, api_version)
 
 
 def default_headers(token, with_content=False):
     headers = {'Authorization': 'Bearer {}'.format(token), 'Accept': 'application/json'}
     if with_content:
         headers['Content-Type'] = 'application/json'
+    return headers
 
 
 def build_deployment_body(module):
@@ -194,37 +210,45 @@ def build_deployment_body(module):
     if module.params.get('template'):
         properties['template'] = module.params.get('template')
     else:
-        properties['template_link'] = \
+        properties['templateLink'] = \
             dict(uri=module.params.get('template_link'),
-                 contentVersion=requests.get(module.params.get('template_link')).json()['properties']['contentVersion'])
+                 contentVersion=requests.get(module.params.get('template_link')).json()['contentVersion'])
 
     if module.params.get('parameters'):
         properties['parameters'] = module.params.get('parameters')
     else:
-        properties['parameters_link'] = \
+        properties['parametersLink'] = \
             dict(uri=module.params.get('parameters_link'),
-                 contentVersion=requests.get(module.params.get('parameters_link')).json()['properties'][
-                     'contentVersion'])
+                 contentVersion=module.params.get('content_version'))
 
     return dict(properties=properties)
 
 
-def deploy_template(module, conn_info):
+def deploy_template(module, conn_info, name):
     """
     Deploy the targeted template and parameters
     :param module: Ansible module containing the validated configuration for the deployment template
     :param conn_info: connection info needed
+    :param name: name of the deployment
     :return:
     """
-    url = deploy_url(conn_info['subscription_id'], conn_info['resource_group_name'], conn_info['deployment_name'])
+    rg_url = resource_group_url(conn_info['subscription_id'], conn_info['resource_group_name'])
+
+    if requests.get(rg_url, headers=default_headers(conn_info['security_token'])).status_code == 404:
+        body = dict(location=module.params.get('location'))
+        res = requests.put(rg_url, data=json.dumps(body), headers=default_headers(conn_info['security_token'], with_content=True))
+        res.raise_for_status()
+    url = deploy_url(conn_info['subscription_id'], conn_info['resource_group_name'], name)
     res = requests.get(url, headers=default_headers(conn_info['security_token']))
-    if res.json()['properties']['provisioning_state'] in FINAL_STATES:
+    if res.status_code == 404 or res.json()['properties']['provisioning_state'] in FINAL_STATES:
         body = build_deployment_body(module)
         res = requests.put(url,
-                           headers=default_headers(conn_info['security_token']),
+                           headers=default_headers(conn_info['security_token'], with_content=True),
                            data=json.dumps(body))
+        module.fail_json(msg=res.json())
         return handle_long_running(conn_info, res)
     else:
+        res.raise_for_status()
         already_running = 'a template deployment matching subscription_id: {}, resource_group_name: {} and name: {} is already running.'.format(
             conn_info['subscription_id'], conn_info['resource_group_name'], conn_info['deployment_name'])
         module.fail_json(msg=already_running)
@@ -239,8 +263,11 @@ def destroy_template(conn_info, name):
     :return: final response after destruction
     """
     url = deploy_url(conn_info['subscription_id'], conn_info['resource_group_name'], name)
-    res = requests.delete(url, headers={'Authorization': 'Bearer {}'.format(conn_info['security_token'])})
-    return handle_long_running(conn_info, res)
+    res = requests.delete(url, headers=default_headers(conn_info['security_token']))
+    if res.status_code != 404:
+        res.raise_for_status()
+        return handle_long_running(conn_info, res)
+    return res
 
 
 def handle_long_running(conn_info, res):
@@ -253,9 +280,11 @@ def handle_long_running(conn_info, res):
     if res.status_code == 202:
         location = res.headers['Location']
         res = requests.get(location, default_headers(conn_info['security_token']))
+        res.raise_for_status()
         while res.status_code == 200 and res.json()['properties']['provisioning_state'] not in FINAL_STATES:
             time.sleep(20)
             res = requests.get(location, default_headers(conn_info['security_token']))
+            res.raise_for_status()
 
         # we have reached a final state for the resource, so get the target of the operation and return it
         return requests.get(AZURE_URL + res.json()['properties']['target_resource']['id'],
@@ -268,7 +297,7 @@ def main():
     argument_spec = dict(
         azure_url=dict(default=AZURE_URL),
         subscription_id=dict(required=True),
-        name=dict(required=True),
+        deployment_name=dict(required=True),
         client_secret=dict(no_log=True),
         client_id=dict(),
         tenant_or_domain=dict(),
@@ -279,7 +308,10 @@ def main():
         template_link=dict(default=None, required=False),
         template_format=dict(default='json', choices=['json', 'yaml'], required=False),
         parameters=dict(required=False, type='dict', default={}),
-        parameters_link=dict(required=False, default=None)
+        parameters_link=dict(default=None),
+        content_version=dict(default='1.0.0.0'),
+        location=dict(default="West US"),
+        tags=dict(type='dict', default=dict())
     )
 
     module = AnsibleModule(
@@ -306,11 +338,16 @@ def main():
     if conn_info['security_token'] is None:
         module.fail_json(msg='failed to retrieve a security token from Azure Active Directory')
 
-    if module.params.get('state') == 'present':
-        deploy_template(module, conn_info)
-    else:
-        destroy_template(conn_info, module.params.get('name'))
-
+    try:
+        if module.params.get('state') == 'present':
+            res = deploy_template(module, conn_info, module.params.get('deployment_name'))
+            res.raise_for_status()
+            module.exit_json(**res.json())
+        else:
+            destroy_template(conn_info, module.params.get('deployment_name'))
+            module.exit_json(msg='deleted')
+    except requests.exceptions.HTTPError:
+        module.fail_json(msg='http failure {}'.format(traceback.format_exc()))
 
 # import module snippets
 from ansible.module_utils.basic import *

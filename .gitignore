@@ -1,6 +1,9 @@
 ansible
+ansible-modules-core
+ansible-modules-extras
 .idea
 creds.yml
+env.sh
 
 
 # Byte-compiled / optimized / DLL files
