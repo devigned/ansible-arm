@@ -24,7 +24,7 @@
         resource_group_name: dev-ops-cle
         deployment_name: test01
         parameters_link: 'https://raw.githubusercontent.com/devigned/ansible-arm/master/paramters.json'
-        template_link: 'https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/101-vm-simple-linux-vm-data-disk/azuredeploy.json'
+        template_link: 'https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/101-simple-linux-vm/azuredeploy.json'
         content_version: '1.0.0.0'
 
 
