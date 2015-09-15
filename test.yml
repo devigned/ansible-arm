@@ -26,5 +26,3 @@
         parameters_link: 'https://raw.githubusercontent.com/devigned/ansible-arm/master/paramters.json'
         template_link: 'https://github.com/Azure/azure-quickstart-templates/raw/master/101-simple-linux-vm/azuredeploy.json'
         content_version: '1.0.0.0'
-
-
