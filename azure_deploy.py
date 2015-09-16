@@ -64,7 +64,7 @@ author: "David Justice (@devigned)"
 
 EXAMPLES = '''
 # destroy a template deployment
-- name: Destory Azure Deploy
+- name: Destroy Azure Deploy
   azure_deploy:
     state: absent
     subscription_id: subscription_id
