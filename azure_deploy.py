@@ -37,11 +37,6 @@ options:
         of them is required if "state" parameter is "present"
     required: false
     default: null
-  template_format:
-    description: For local templates, allows specification of json or yaml format
-    default: json
-    choices: [ json, yaml ]
-    required: false
   parameters:
     description:
       - a list of hashes of all the template variables for the deployment template
@@ -53,11 +48,6 @@ options:
         one of them is required if "state" parameter is "present"
     required: false
     default: null
-  parameters_format:
-    description: For local parameters, allows specification of json or yaml format
-    default: json
-    choices: [ json, yaml ]
-    required: false
   location:
     description:
       - Where the resource group should live
@@ -69,34 +59,29 @@ options:
     require: false
     default: {}
 
-  Example:
-    ---
-    - name: Destory Azure Deploy
-      hosts: 127.0.0.1
-      connection: local
-      tasks:
-        - name: Delete deploy
-          local_action:
-            module: azure_deploy
-            state: absent
-            subscription_id: subscription_id
-            resource_group_name: dev-ops-cle
-            deployment_name: test01
-
-    - name: Create Azure Deploy
-      hosts: 127.0.0.1
-      connection: local
-      tasks:
-        - name: Create deploy
-          local_action:
-            module: azure_deploy
-            state: present
-            subscription_id: subscription_id
-            resource_group_name: dev-ops-cle
-            deployment_name: test01
-            parameters_link: 'https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/101-simple-linux-vm/azuredeploy.parameters.json'
-            template_link: 'https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/101-simple-linux-vm/azuredeploy.json'
+author: "David Justice (@devigned)"
 '''
+
+EXAMPLES = '''
+# destroy a template deployment
+- name: Destory Azure Deploy
+  azure_deploy:
+    state: absent
+    subscription_id: subscription_id
+    resource_group_name: dev-ops-cle
+    deployment_name: test01
+
+# create or update a template deployment based on uris to paramters and a template
+- name: Create Azure Deploy
+  azure_deploy:
+    state: present
+    subscription_id: subscription_id
+    resource_group_name: dev-ops-cle
+    deployment_name: test01
+    parameters_link: 'https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/101-simple-linux-vm/azuredeploy.parameters.json'
+    template_link: 'https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/101-simple-linux-vm/azuredeploy.json'
+'''
+
 try:
     import time
     import yaml
@@ -257,20 +242,14 @@ def deploy_template(module, client, conn_info):
     deploy_parameter.mode = azure.mgmt.resource.DeploymentMode.incremental
 
     if module.params.get('parameters_link') is None:
-        if module.params.get('parameters_format') == 'yaml':
-            deploy_parameter.parameters = json.dump(yaml.load(module.params.get('parameters')))
-        else:
-            deploy_parameter.parameters = module.params.get('parameters')
+        deploy_parameter.parameters = module.params.get('parameters')
     else:
         parameters_link = azure.mgmt.resource.ParametersLink()
         parameters_link.uri = module.params.get('parameters_link')
         deploy_parameter.parameters_link = parameters_link
 
     if module.params.get('template_link') is None:
-        if module.params.get('template_format') == 'yaml':
-            deploy_parameter.template = json.dump(yaml.load(module.params.get('template')))
-        else:
-            deploy_parameter.template = module.params.get('template')
+        deploy_parameter.template = module.params.get('template')
     else:
         template_link = azure.mgmt.resource.TemplateLink()
         template_link.uri = module.params.get('template_link')
@@ -345,11 +324,9 @@ def main():
         security_token=dict(aliases=['access_token'], no_log=True),
         resource_group_name=dict(required=True),
         state=dict(default='present', choices=['present', 'absent']),
-        template=dict(default=None, required=False),
-        template_link=dict(default=None, required=False),
-        template_format=dict(default='json', choices=['json', 'yaml'], required=False),
-        parameters_format=dict(default='json', choices=['json', 'yaml'], required=False),
-        parameters=dict(required=False, type='dict', default=None),
+        template=dict(default=None, type='dict'),
+        parameters=dict(default=None, type='dict'),
+        template_link=dict(default=None),
         parameters_link=dict(default=None),
         location=dict(default="West US"),
         tags=dict(type='dict', default=dict())
