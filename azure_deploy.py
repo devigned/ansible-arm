@@ -2,10 +2,10 @@
 DOCUMENTATION = '''
 ---
 module: azure_deploy
-short_description: Provision and Read Azure resources via the Azure Resource Manager REST API
+short_description: Create or destroy Azure deployments via Azure Resource Manager API
 version_added: "2.0"
 description:
-     - Launches or destroys an Azure deployment template
+     - Create or destroy Azure deployments via Azure Resource Manager API using requests and Python SDK for Azure
 options:
   subscription_id:
     description:
