@@ -21,31 +21,31 @@ options:
     required: true
   state:
     description:
-      - If state is "present", template will be created.  If state is "present" and if stack exists and template has
-        changed, it will be updated. If state is "absent", stack will be removed.
+      - If state is "present", template will be created.  If state is "present" and if stack exists, it will be updated.
+       If state is "absent", stack will be removed.
     required: true
   template:
     description:
-      - The local path of the Azure deployment template. This parameter is mutually exclusive with 'template_url'.
+      - The local path of the Azure deployment template. This parameter is mutually exclusive with 'template_link'.
         Either one of them is required if "state" parameter is "present". Must give full path to the file, relative to
         the working directory. If using roles this may look like "roles/azure_template/files/azure_template-example.json"
     required: false
     default: None
   template_link:
     description:
-      - Location of file containing the template body. This parameter is mutually exclusive with 'template'. Either one
-        of them is required if "state" parameter is "present"
+      - Uri of file containing the template body. This parameter is mutually exclusive with 'template'. Either one
+        of them is required if "state" parameter is "present".
     required: false
     default: None
   parameters:
     description:
-      - a list of hashes of all the template variables for the deployment template
+      - a hashes of all the template variables for the deployment template
     required: false
     default: None
   parameters_link:
     description:
-      - Location of file containing the parameters body. This parameter is mutually exclusive with 'parameters'. Either
-        one of them is required if "state" parameter is "present"
+      - Uri of file containing the parameters body. This parameter is mutually exclusive with 'parameters'. Either
+        one of them is required if "state" parameter is "present".
     required: false
     default: None
   location:
