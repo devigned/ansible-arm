@@ -30,40 +30,35 @@ options:
         Either one of them is required if "state" parameter is "present". Must give full path to the file, relative to
         the working directory. If using roles this may look like "roles/azure_template/files/azure_template-example.json"
     required: false
-    default: null
+    default: None
   template_link:
     description:
       - Location of file containing the template body. This parameter is mutually exclusive with 'template'. Either one
         of them is required if "state" parameter is "present"
     required: false
-    default: null
+    default: None
   parameters:
     description:
       - a list of hashes of all the template variables for the deployment template
     required: false
-    default: {}
+    default: None
   parameters_link:
     description:
       - Location of file containing the parameters body. This parameter is mutually exclusive with 'parameters'. Either
         one of them is required if "state" parameter is "present"
     required: false
-    default: null
+    default: None
   location:
     description:
       - Where the resource group should live
     require: false
     default: West US
-  tags:
-    description:
-      - Tags to associate to the resource group
-    require: false
-    default: {}
 
 author: "David Justice (@devigned)"
 '''
 
 EXAMPLES = '''
-# destroy a template deployment
+# Destroy a template deployment
 - name: Destroy Azure Deploy
   azure_deploy:
     state: absent
@@ -71,7 +66,7 @@ EXAMPLES = '''
     resource_group_name: dev-ops-cle
     deployment_name: test01
 
-# create or update a template deployment based on uris to paramters and a template
+# Create or update a template deployment based on uris to paramters and a template
 - name: Create Azure Deploy
   azure_deploy:
     state: present
@@ -80,6 +75,172 @@ EXAMPLES = '''
     deployment_name: test01
     parameters_link: 'https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/101-simple-linux-vm/azuredeploy.parameters.json'
     template_link: 'https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/101-simple-linux-vm/azuredeploy.json'
+
+# Create or update a template deployment based on a uri to the template and parameters specified inline
+- name: Create Azure Deploy
+  azure_deploy:
+    state: present
+    subscription_id: cbbdaed0-fea9-4693-bf0c-d446ac93c030
+    resource_group_name: dev-ops-cle
+    deployment_name: test01
+    parameters:
+      newStorageAccountName:
+        value: devopsclestorage
+      adminUsername:
+        value: devopscle
+      adminPassword:
+        value: Password1!
+      dnsNameForPublicIP:
+        value: devopscleazure
+    template_link: 'https://github.com/Azure/azure-quickstart-templates/raw/master/101-simple-linux-vm/azuredeploy.json'
+
+# Create or update a template deployment based on an inline template and parameters
+- name: Create Azure Deploy
+  azure_deploy:
+    state: present
+    subscription_id: cbbdaed0-fea9-4693-bf0c-d446ac93c030
+    resource_group_name: dev-ops-cle
+    deployment_name: test01
+    template:
+      $schema: "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#"
+      contentVersion: "1.0.0.0"
+      parameters:
+        newStorageAccountName:
+          type: "string"
+          metadata:
+            description: "Unique DNS Name for the Storage Account where the Virtual Machine's disks will be placed."
+        adminUsername:
+          type: "string"
+          metadata:
+            description: "User name for the Virtual Machine."
+        adminPassword:
+          type: "securestring"
+          metadata:
+            description: "Password for the Virtual Machine."
+        dnsNameForPublicIP:
+          type: "string"
+          metadata:
+            description: "Unique DNS Name for the Public IP used to access the Virtual Machine."
+        ubuntuOSVersion:
+          type: "string"
+          defaultValue: "14.04.2-LTS"
+          allowedValues:
+            - "12.04.5-LTS"
+            - "14.04.2-LTS"
+            - "15.04"
+          metadata:
+            description: "The Ubuntu version for the VM. This will pick a fully patched image of this given Ubuntu version. Allowed values: 12.04.5-LTS, 14.04.2-LTS, 15.04."
+      variables:
+        location: "West US"
+        imagePublisher: "Canonical"
+        imageOffer: "UbuntuServer"
+        OSDiskName: "osdiskforlinuxsimple"
+        nicName: "myVMNic"
+        addressPrefix: "10.0.0.0/16"
+        subnetName: "Subnet"
+        subnetPrefix: "10.0.0.0/24"
+        storageAccountType: "Standard_LRS"
+        publicIPAddressName: "myPublicIP"
+        publicIPAddressType: "Dynamic"
+        vmStorageAccountContainerName: "vhds"
+        vmName: "MyUbuntuVM"
+        vmSize: "Standard_D1"
+        virtualNetworkName: "MyVNET"
+        vnetID: "[resourceId('Microsoft.Network/virtualNetworks',variables('virtualNetworkName'))]"
+        subnetRef: "[concat(variables('vnetID'),'/subnets/',variables('subnetName'))]"
+      resources:
+        -
+          type: "Microsoft.Storage/storageAccounts"
+          name: "[parameters('newStorageAccountName')]"
+          apiVersion: "2015-05-01-preview"
+          location: "[variables('location')]"
+          properties:
+            accountType: "[variables('storageAccountType')]"
+        -
+          apiVersion: "2015-05-01-preview"
+          type: "Microsoft.Network/publicIPAddresses"
+          name: "[variables('publicIPAddressName')]"
+          location: "[variables('location')]"
+          properties:
+            publicIPAllocationMethod: "[variables('publicIPAddressType')]"
+            dnsSettings:
+              domainNameLabel: "[parameters('dnsNameForPublicIP')]"
+        -
+          type: "Microsoft.Network/virtualNetworks"
+          apiVersion: "2015-05-01-preview"
+          name: "[variables('virtualNetworkName')]"
+          location: "[variables('location')]"
+          properties:
+            addressSpace:
+              addressPrefixes:
+                - "[variables('addressPrefix')]"
+            subnets:
+              -
+                name: "[variables('subnetName')]"
+                properties:
+                  addressPrefix: "[variables('subnetPrefix')]"
+        -
+          type: "Microsoft.Network/networkInterfaces"
+          apiVersion: "2015-05-01-preview"
+          name: "[variables('nicName')]"
+          location: "[variables('location')]"
+          dependsOn:
+            - "[concat('Microsoft.Network/publicIPAddresses/', variables('publicIPAddressName'))]"
+            - "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]"
+          properties:
+            ipConfigurations:
+              -
+                name: "ipconfig1"
+                properties:
+                  privateIPAllocationMethod: "Dynamic"
+                  publicIPAddress:
+                    id: "[resourceId('Microsoft.Network/publicIPAddresses',variables('publicIPAddressName'))]"
+                  subnet:
+                    id: "[variables('subnetRef')]"
+        -
+          type: "Microsoft.Compute/virtualMachines"
+          apiVersion: "2015-06-15"
+          name: "[variables('vmName')]"
+          location: "[variables('location')]"
+          dependsOn:
+            - "[concat('Microsoft.Storage/storageAccounts/', parameters('newStorageAccountName'))]"
+            - "[concat('Microsoft.Network/networkInterfaces/', variables('nicName'))]"
+          properties:
+            hardwareProfile:
+              vmSize: "[variables('vmSize')]"
+            osProfile:
+              computername: "[variables('vmName')]"
+              adminUsername: "[parameters('adminUsername')]"
+              adminPassword: "[parameters('adminPassword')]"
+            storageProfile:
+              imageReference:
+                publisher: "[variables('imagePublisher')]"
+                offer: "[variables('imageOffer')]"
+                sku: "[parameters('ubuntuOSVersion')]"
+                version: "latest"
+              osDisk:
+                name: "osdisk"
+                vhd:
+                  uri: "[concat('http://',parameters('newStorageAccountName'),'.blob.core.windows.net/',variables('vmStorageAccountContainerName'),'/',variables('OSDiskName'),'.vhd')]"
+                caching: "ReadWrite"
+                createOption: "FromImage"
+            networkProfile:
+              networkInterfaces:
+                -
+                  id: "[resourceId('Microsoft.Network/networkInterfaces',variables('nicName'))]"
+            diagnosticsProfile:
+              bootDiagnostics:
+                enabled: "true"
+                storageUri: "[concat('http://',parameters('newStorageAccountName'),'.blob.core.windows.net')]"
+    parameters:
+      newStorageAccountName:
+        value: devopsclestorage
+      adminUsername:
+        value: devopscle
+      adminPassword:
+        value: Password1!
+      dnsNameForPublicIP:
+        value: devopscleazure
 '''
 
 try:
@@ -87,6 +248,7 @@ try:
     import yaml
     import requests
     import azure
+    from itertools import chain
     from azure.mgmt.common import SubscriptionCloudCredentials
     from azure.mgmt.resource import ResourceManagementClient
 
@@ -205,9 +367,9 @@ def build_deployment_body(module):
 def follow_deployment(client, group_name, deployment):
     state = deployment.properties.provisioning_state
     if state == azure.mgmt.common.OperationStatus.Failed or \
-        state == azure.mgmt.common.OperationStatus.Succeeded or \
-        state == "Canceled" or \
-            state == "Deleted":
+                    state == azure.mgmt.common.OperationStatus.Succeeded or \
+                    state == "Canceled" or \
+                    state == "Deleted":
         return deployment
     else:
         time.sleep(30)
@@ -242,14 +404,14 @@ def deploy_template(module, client, conn_info):
     deploy_parameter.mode = azure.mgmt.resource.DeploymentMode.incremental
 
     if module.params.get('parameters_link') is None:
-        deploy_parameter.parameters = module.params.get('parameters')
+        deploy_parameter.parameters = json.dumps(module.params.get('parameters'), ensure_ascii=False)
     else:
         parameters_link = azure.mgmt.resource.ParametersLink()
         parameters_link.uri = module.params.get('parameters_link')
         deploy_parameter.parameters_link = parameters_link
 
     if module.params.get('template_link') is None:
-        deploy_parameter.template = module.params.get('template')
+        deploy_parameter.template = json.dumps(module.params.get('template'), ensure_ascii=False)
     else:
         template_link = azure.mgmt.resource.TemplateLink()
         template_link.uri = module.params.get('template_link')
@@ -313,6 +475,73 @@ def destroy_template(module, client, conn_info):
                 msg='Delete deploy failed with status code: %s and message: %s' % (e.status_code, e.message))
 
 
+def get_dependencies(dep_tree, resource_type):
+    matches = [value for value in dep_tree.values() if value['dep'].resource_type == resource_type]
+    for child_tree in [value['children'] for value in dep_tree.values()]:
+        matches += get_dependencies(child_tree, resource_type)
+    return matches
+
+
+def build_hierarchy(module, dependencies, tree=None):
+    tree = dict(top=True) if tree is None else tree
+    for dep in dependencies:
+        if dep.resource_name not in tree:
+            tree[dep.resource_name] = dict(dep=dep, children=dict())
+        if isinstance(dep, azure.mgmt.resource.Dependency) and dep.depends_on is not None and len(dep.depends_on) > 0:
+            build_hierarchy(module, dep.depends_on, tree[dep.resource_name]['children'])
+
+    if 'top' in tree:
+        tree.pop('top', None)
+        keys = list(tree.keys())
+        for key1 in keys:
+            for key2 in keys:
+                if key2 in tree and key1 in tree[key2]['children']:
+                    tree[key2]['children'][key1] = tree[key1]
+                    tree.pop(key1)
+    return tree
+
+
+class ResourceId:
+    def __init__(self, **kwargs):
+        self.resource_name = kwargs.get('resource_name')
+        self.resource_provider_api_version = kwargs.get('api_version')
+        self.resource_provider_namespace = kwargs.get('resource_namespace')
+        self.resource_type = kwargs.get('resource_type')
+        self.parent_resource_path = kwargs.get('parent_resource_path')
+        pass
+
+
+def get_resource_details(client, group, name, resource_type, namespace, api_version):
+    res_id = ResourceId(resource_name=name, api_version=api_version, resource_namespace=namespace,
+                        resource_type=resource_type)
+    return client.resources.get(group, res_id).resource
+
+
+def get_ip_dict(ip):
+    p = json.loads(ip.properties)
+    d = p['dnsSettings']
+    return dict(name=ip.name,
+                id=ip.id,
+                public_ip=p['ipAddress'],
+                public_ip_allocation_method=p['publicIPAllocationMethod'],
+                dns_settings=d)
+
+
+def get_instances(module, client, group, deployment):
+    dep_tree = build_hierarchy(module, deployment.properties.dependencies)
+    vms = get_dependencies(dep_tree, resource_type="Microsoft.Compute/virtualMachines")
+
+    vms_and_ips = [(vm, get_dependencies(vm['children'], "Microsoft.Network/publicIPAddresses")) for vm in vms]
+    vms_and_ips = [(vm['dep'], [get_resource_details(client,
+                                                     group,
+                                                     ip['dep'].resource_name,
+                                                     "publicIPAddresses",
+                                                     "Microsoft.Network",
+                                                     "2015-05-01-preview") for ip in ip_list]) for vm, ip_list in vms_and_ips if len(ip_list) > 0]
+
+    return [dict(vm_name=vm.resource_name, ips=[get_ip_dict(ip) for ip in ips]) for vm, ips in vms_and_ips]
+
+
 def main():
     argument_spec = dict(
         azure_url=dict(default=AZURE_URL),
@@ -328,8 +557,7 @@ def main():
         parameters=dict(default=None, type='dict'),
         template_link=dict(default=None),
         parameters_link=dict(default=None),
-        location=dict(default="West US"),
-        tags=dict(type='dict', default=dict())
+        location=dict(default="West US")
     )
 
     module = AnsibleModule(
@@ -339,8 +567,8 @@ def main():
 
     conn_info = get_azure_connection_info(module)
 
-    if conn_info['security_token'] is None and (
-                        conn_info['client_id'] is None or conn_info['client_secret'] is None or conn_info[
+    if conn_info['security_token'] is None and \
+            (conn_info['client_id'] is None or conn_info['client_secret'] is None or conn_info[
                 'tenant_or_domain'] is None):
         module.fail_json(msg='security token or client_id, client_secret and tenant_or_domain is required')
 
@@ -355,8 +583,8 @@ def main():
     if conn_info['security_token'] is None:
         module.fail_json(msg='failed to retrieve a security token from Azure Active Directory')
 
-    creds = SubscriptionCloudCredentials(module.params.get('subscription_id'), conn_info['security_token'])
-    resource_client = ResourceManagementClient(creds)
+    credentials = SubscriptionCloudCredentials(module.params.get('subscription_id'), conn_info['security_token'])
+    resource_client = ResourceManagementClient(credentials)
     conn_info['deployment_name'] = module.params.get('deployment_name')
 
     if module.params.get('state') == 'present':
@@ -365,6 +593,7 @@ def main():
                     group_name=conn_info['resource_group_name'],
                     id=deployment.id,
                     outputs=deployment.properties.outputs,
+                    instances=get_instances(module, resource_client, conn_info['resource_group_name'], deployment),
                     changed=True,
                     msg='deployment created')
         module.exit_json(**data)
